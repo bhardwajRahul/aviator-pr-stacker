@@ -44,14 +44,24 @@ func (d DeleteBranchCmd) Execute(ctx *Context) error {
 		Args:      []string{"branch", "--delete", "--force", d.Name},
 		ExitError: true,
 	})
-	if exiterr, ok := errutils.As[*exec.ExitError](err); ok &&
-		strings.Contains(string(exiterr.Stderr), "not found") {
-		_, _ = fmt.Fprint(os.Stderr,
-			colors.Warning("Branch "), colors.UserInput(d.Name),
-			colors.Warning(" was already deleted.\n"),
-		)
-		return nil
-	} else if err != nil {
+	if exiterr, ok := errutils.As[*exec.ExitError](err); ok {
+		stderr := string(exiterr.Stderr)
+		if strings.Contains(stderr, "not found") {
+			_, _ = fmt.Fprint(os.Stderr,
+				colors.Warning("Branch "), colors.UserInput(d.Name),
+				colors.Warning(" was already deleted.\n"),
+			)
+			return nil
+		}
+		if strings.Contains(stderr, "used by worktree") {
+			msg := fmt.Sprintf("cannot delete branch %q: it is checked out in a worktree\n", d.Name)
+			msg += "Use 'git worktree list' to see all worktrees\n"
+			msg += "Remove the worktree with 'git worktree remove <path>' or checkout a different branch in that worktree\n"
+			_, _ = fmt.Fprint(os.Stderr, msg)
+			return nil
+		}
+	}
+	if err != nil {
 		return err
 	}
 
